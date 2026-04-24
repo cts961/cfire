@@ -49,7 +49,7 @@
  * The flag `CFIRE_REPL_DASHES` tells the parser to replace dashes (`-`) with underscores
  * (`_`). Therefore, you see that `--first-argument` turns into `"first_argument"`. The
  * starting dashes are removed due to `CFIRE_TRIM_DASHES`. Should this flag be not specified,
- * the resulting name would be `"first_argument"`.
+ * the resulting name would be `"__first_argument"`.
  *
  * The flag `CFIRE_FLAGS` tells the parser to treat arguments starting with `"--F"` (or your
  * custom `CFIRE_FLAG_ENTRY_PREFIX`) value as a flag entry. Flag entries contains only one
@@ -146,6 +146,9 @@ typedef struct {
 
 typedef int (*Cfire_Predicate_t)(const char *, void *, void *);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 CFIRE_DECL_ int         cfire_try_parse_integer(const char *s, long int *out);
 CFIRE_DECL_ int         cfire_try_parse_floating(const char *s, double *out);
@@ -168,6 +171,9 @@ CFIRE_DECL_ Cfire_Error cfire_loadd(double *dest, const Cfire_Entry *entry);
 CFIRE_DECL_ Cfire_Error cfire_loadf(float *dest, const Cfire_Entry *entry);
 CFIRE_DECL_ Cfire_Error cfire_loads(const char **dest, const Cfire_Entry *entry);
 
+#ifdef __cplusplus
+}
+#endif
 #ifndef CFIRE_DECLARATION_ONLY
 
 CFIRE_DEF_ int cfire_try_parse_integer(const char *s, long int *out) {
