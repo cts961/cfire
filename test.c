@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     Cfire_Entry *entries   = NULL;
     size_t       n_entries = 0;
 
-    Cfire_Error error = cfire_parse(argc, argv, &entries, &n_entries, CFIRE_REPL_DASHES | CFIRE_TRIM_DASHES | CFIRE_FLAGS | CFIRE_ZERO);
+    Cfire_Error error = cfire_parse(argc, argv, &entries, &n_entries, CFIRE_REPL_DASHES | CFIRE_TRIM_DASHES | CFIRE_FLAGS);
 
     if (error != CFIRE_SUCCESS) {
         fprintf(stderr, "Error: %d\n", error);
@@ -23,12 +23,17 @@ int main(int argc, char **argv) {
     // ./test --a 123456 --value-for-b 1123456.0 --c "Hello" --Fsome-flag
     struct MyArgs my_args = {.a = 0, .b = 1.0, .c = NULL, .some_flag = 0};
 
-    Cfire_for_each_entry(entries, n_entries)
-        Cfire_load(my_args, a);
-        Cfire_load_by_name(my_args.b, "value_for_b");
-        Cfire_load(my_args, c);
-        Cfire_load(my_args, some_flag);
-    Cfire_end_for_each_entry
+    Cfire_ForEachEntry(entries, n_entries, error) {
+        Cfire_LoadByName(my_args, a, i);
+        Cfire_LoadByName(my_args, b, d);
+        Cfire_LoadByName(my_args, c, s);
+        Cfire_LoadByName(my_args, some_flag, i);
+    }
+
+    if (error != CFIRE_SUCCESS) {
+        fprintf(stderr, "Error: %d\n", error);
+        return 1;
+    }
 
     fprintf(stdout, "%d ", my_args.a);
     fprintf(stdout, "%f ", my_args.b);

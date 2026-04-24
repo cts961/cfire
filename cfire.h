@@ -100,6 +100,12 @@
 #define CFIRE_DECLARATION_ONLY
 #endif
 
+#define CFIRE_ARG_KIND_INTEGER_VALUE(Entry) (Entry)->value.integer
+#define CFIRE_ARG_KIND_FLOATING_VALUE(Entry) (Entry)->value.floating
+#define CFIRE_ARG_KIND_STRING_VALUE(Entry) (Entry)->value.string
+#define CFIRE_ARG_KIND_FLAG_VALUE(Entry) (Entry)->value.flag
+#define CFIRE_GET_UNION_VALUE_(Kind, Entry) CFIRE_ARG_KIND_##Kind##_VALUE(Entry)
+
 typedef enum {
     CFIRE_ARG_KIND_INTEGER = 0,
     CFIRE_ARG_KIND_FLOATING,
@@ -114,7 +120,8 @@ typedef enum {
     CFIRE_BAD_ALLOC,
     CFIRE_INVALID_PTR,
     CFIRE_INVALID_ARG,
-    CFIRE_EMPTY_STRING
+    CFIRE_EMPTY_STRING,
+    CFIRE_WRONG_TYPE
 } Cfire_Error;
 
 typedef enum {
@@ -140,10 +147,6 @@ typedef struct {
 typedef int (*Cfire_Predicate_t)(const char *, void *, void *);
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 CFIRE_DECL_ int         cfire_try_parse_integer(const char *s, long int *out);
 CFIRE_DECL_ int         cfire_try_parse_floating(const char *s, double *out);
 CFIRE_DECL_ const char *cfire_remove_prefix(const char *s, char c);
@@ -152,13 +155,18 @@ CFIRE_DECL_ Cfire_Error cfire_parse_entry(const char *arg_name, const char *arg_
 CFIRE_DECL_ Cfire_Error cfire_parse(int argc, char **argv, Cfire_Entry **out_entries, size_t *out_entry_count, int flags);
 CFIRE_DECL_ const char *cfire_error_string(Cfire_Error error);
 CFIRE_DECL_ void        cfire_free(Cfire_Entry *entries);
-CFIRE_DECL_ void        cfire_load_into(void *dest, const Cfire_Entry *entry);
 CFIRE_DECL_ size_t      cfire_count_if(int n, char **cv, Cfire_Predicate_t, void *arg);
 CFIRE_DECL_ int         cfire_starts_with(const char *s, void *pprfx, void *offset);
 
-#ifdef __cplusplus
-}
-#endif
+CFIRE_DECL_ Cfire_Error cfire_loadi(int *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadl(long *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadll(long long *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadu(unsigned int *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadul(unsigned long *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadull(unsigned long long *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadd(double *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loadf(float *dest, const Cfire_Entry *entry);
+CFIRE_DECL_ Cfire_Error cfire_loads(const char **dest, const Cfire_Entry *entry);
 
 #ifndef CFIRE_DECLARATION_ONLY
 
@@ -442,6 +450,7 @@ CFIRE_DEF_ const char *cfire_error_string(Cfire_Error error) {
         case CFIRE_INVALID_PTR: return "Invalid pointer";
         case CFIRE_INVALID_ARG: return "Invalid argument";
         case CFIRE_EMPTY_STRING: return "Emtpy string";
+        case CFIRE_WRONG_TYPE: return "Wrong value type";
         default: return "Unknown error";
     }
 }
@@ -452,39 +461,57 @@ CFIRE_DEF_ void cfire_free(Cfire_Entry *entries) {
     }
 }
 
-CFIRE_DEF_ void cfire_load_into(void *dest, const Cfire_Entry *entry) {
-    switch (entry->kind) {
-        case CFIRE_ARG_KIND_INTEGER:
-            *(long int *) dest = entry->value.integer;
-            break;
-        case CFIRE_ARG_KIND_FLOATING:
-            *(double *) dest = entry->value.floating;
-            break;
-        case CFIRE_ARG_KIND_STRING:
-            *(const char **) dest = entry->value.string;
-            break;
-        case CFIRE_ARG_KIND_FLAG:
-            *(int *) dest = entry->value.flag;
-            break;
-        default:
-            break;
+/* vvv For loading values vvv */
+
+#define CFIRE_ARG_ASSIGN_(Kind, Type) \
+    case CFIRE_ARG_KIND_##Kind: \
+        *(Cfire_Macro_Internal_Dest) = (Type) CFIRE_GET_UNION_VALUE_(Kind, Cfire_Macro_Internal_Entry); \
+        return CFIRE_SUCCESS
+
+#define CFIRE_DEFINE_TYPED_CONVERSION_BEGIN_(Type, Code) \
+    CFIRE_DEF_ Cfire_Error cfire_load##Code(Type* dest, const Cfire_Entry* entry) { \
+        Type* Cfire_Macro_Internal_Dest = dest; \
+        const Cfire_Entry*  Cfire_Macro_Internal_Entry = entry;\
+        switch(Cfire_Macro_Internal_Entry->kind) {
+
+#define CFIRE_DEFINE_TYPED_CONVERSION_END_ default: return CFIRE_WRONG_TYPE; } }
+
+#define CFIRE_DEFINE_NUMERICAL_CONVERSION_(Type, Code) \
+    CFIRE_DEFINE_TYPED_CONVERSION_BEGIN_(Type, Code) \
+        CFIRE_ARG_ASSIGN_(INTEGER, Type);\
+        CFIRE_ARG_ASSIGN_(FLOATING, Type);\
+        CFIRE_ARG_ASSIGN_(FLAG, Type);\
+    CFIRE_DEFINE_TYPED_CONVERSION_END_
+
+#define CFIRE_DEFINE_STRING_CONVERSION_(Type, Code) \
+    CFIRE_DEFINE_TYPED_CONVERSION_BEGIN_(Type, Code) \
+        CFIRE_ARG_ASSIGN_(STRING, Type);\
+    CFIRE_DEFINE_TYPED_CONVERSION_END_
+
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(int, i);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(long, l);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(long long, ll);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned int, u);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long, ul);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long long, ull);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(double, d);
+CFIRE_DEFINE_NUMERICAL_CONVERSION_(float, f);
+CFIRE_DEFINE_STRING_CONVERSION_(const char*, s);
+
+#define Cfire_ForEachEntry(Entries, NEntries, ErrorCode) \
+    size_t Cfire_Macro_Internal_Index = 0;  \
+    Cfire_Error* Cfire_Macro_Internal_ErrorCodePtr = &(ErrorCode); \
+    const Cfire_Entry* Cfire_Macro_Internal_Entries = (Entries);      \
+    for (; Cfire_Macro_Internal_Index < (NEntries); ++Cfire_Macro_Internal_Index)
+
+#define Cfire_Load(OutVariable, Name, TypeCode) \
+    if (strcmp(Cfire_Macro_Internal_Entries[Cfire_Macro_Internal_Index].name, (Name)) == 0) { \
+      *Cfire_Macro_Internal_ErrorCodePtr = cfire_load##TypeCode(&(OutVariable), &Cfire_Macro_Internal_Entries[Cfire_Macro_Internal_Index]); \
+      if (*Cfire_Macro_Internal_ErrorCodePtr != CFIRE_SUCCESS) break; \
     }
-}
+
+#define Cfire_LoadByName(OutStruct, Name, TypeCode) Cfire_Load((OutStruct).Name, #Name, TypeCode)
 
 #endif // NOT CFIRE_DECLARATION_ONLY
-
-#define Cfire_for_each_entry(Entries, NEntries)                            \
-    for (size_t i = 0; i < (NEntries); ++i) {                               \
-        const Cfire_Entry* Cfire_Macro_Internal_Entry = Entries + i;
-
-#define Cfire_load(Struct, Name)                               \
-    if (strcmp(#Name, Cfire_Macro_Internal_Entry->name) == 0)               \
-        cfire_load_into(&Struct.Name, Cfire_Macro_Internal_Entry);
-
-#define Cfire_load_by_name(Dest, Name)                                         \
-    if (strcmp(Name, Cfire_Macro_Internal_Entry->name) == 0)                \
-    cfire_load_into(&Dest, Cfire_Macro_Internal_Entry);
-
-#define Cfire_end_for_each_entry }
 
 #endif // CFIRE_LIBRARY_H
