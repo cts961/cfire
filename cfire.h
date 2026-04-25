@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifndef CFIRE_FLAG_ENTRY_PREFIX
 #define CFIRE_FLAG_ENTRY_PREFIX "--F"
@@ -98,7 +99,7 @@ CFIRE_DECL_ int         cfire_try_parse_floating(const char *s, double *out);
 CFIRE_DECL_ const char *cfire_remove_prefix(const char *s, char c);
 CFIRE_DECL_ Cfire_Error cfire_convert_name(const char *arg_name, char *out, int flags);
 CFIRE_DECL_ Cfire_Error cfire_parse_entry(const char *arg_name, const char *arg_value, Cfire_Entry *out_entry, int flag);
-CFIRE_DECL_ Cfire_Error cfire_parse(int argc, char **argv, Cfire_Entry **out_entries, size_t *out_entry_count, int flags);
+CFIRE_DECL_ Cfire_Error cfire_parse(int argc, char **argv, Cfire_Entry **out_entries, size_t *out_entry_count, int* err_index, int flags);
 CFIRE_DECL_ const char *cfire_error_string(Cfire_Error error);
 CFIRE_DECL_ void        cfire_free(Cfire_Entry *entries);
 CFIRE_DECL_ size_t      cfire_count_if(int n, char **cv, Cfire_Predicate_t, void *arg);
@@ -240,7 +241,8 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
     int           argc,
     char **       argv,
     Cfire_Entry **out_entries,
-    size_t *      out_entry_count,
+	size_t *      out_entry_count,
+	int *         out_err_index,
     int           flags
 ) {
 
@@ -251,6 +253,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
     size_t       entry_cnt;
     size_t       fentry_cnt;
     size_t       act_argc = argc - ((flags & CFIRE_ZERO) ? 0 : 1);
+	int          err_index = -1;
 
     if (!(flags & CFIRE_FLAGS)) {
 
@@ -271,6 +274,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
         for (i = (flags & CFIRE_ZERO) ? 0 : 1; i < argc; i += 2, ++curr_entry) {
             err_code = cfire_parse_entry(argv[i], argv[i + 1], curr_entry, flags);
             if (err_code != CFIRE_SUCCESS) {
+				err_index = i;
                 goto error;
             }
         }
@@ -307,11 +311,13 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
 
                 if (p != 0) {
                     err_code = CFIRE_INVALID_ARG;
+					err_index = i;
                     goto error;
                 }
 
                 err_code = cfire_convert_name(argv[i] + offset, curr_entry->name, flags);
                 if (err_code != CFIRE_SUCCESS) {
+					err_index = i;
                     goto error;
                 }
 
@@ -332,13 +338,13 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
 
             err_code = cfire_parse_entry(argv[i - 1], argv[i], curr_entry, flags);
             if (err_code != CFIRE_SUCCESS) {
+				err_index = i - 1;
                 goto error;
             }
             ++curr_entry;
 
         }
     }
-
 
     // Write outputs
     if (out_entries != NULL) {
@@ -355,6 +361,10 @@ error:
     if (entries != NULL) {
         free(entries);
     }
+
+	if (out_err_index != NULL) {
+		*out_err_index = err_index;
+	}
 
     return err_code;
 
@@ -410,6 +420,8 @@ CFIRE_DEF_ void cfire_free(Cfire_Entry *entries) {
     }
 }
 
+#endif // NOT CFIRE_DECLARATION_ONLY
+
 /* vvv For loading values vvv */
 
 #define CFIRE_ARG_ASSIGN_(Kind, Type) \
@@ -461,6 +473,6 @@ CFIRE_DEFINE_STRING_CONVERSION_(const char*, s);
 
 #define Cfire_LoadByName(OutStruct, Name, TypeCode) Cfire_Load((OutStruct).Name, #Name, TypeCode)
 
-#endif // NOT CFIRE_DECLARATION_ONLY
+/* ^^^ End of loading values ^^^ */
 
 #endif // CFIRE_LIBRARY_H

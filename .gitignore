@@ -5,3 +5,7 @@ build
 .venv
 venv
 .claude
+
+.cache
+ 
+compile_commands.json
