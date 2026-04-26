@@ -69,10 +69,11 @@ typedef enum {
 } Cfire_Error;
 
 typedef enum {
-    CFIRE_TRIM_DASHES = 1,
-    CFIRE_REPL_DASHES = 1 << 1,
-    CFIRE_FLAGS       = 1 << 2,
-    CFIRE_ZERO        = 1 << 3
+    CFIRE_TRIM_DASHES  = 1,
+    CFIRE_REPL_DASHES  = 1 << 1,
+    CFIRE_FLAGS        = 1 << 2,
+    CFIRE_ZERO         = 1 << 3,
+    CFIRE_COPY_STRINGS = 1 << 4
 } Cfire_Flag;
 
 typedef union {
@@ -90,6 +91,13 @@ typedef struct {
 
 typedef int (*Cfire_Predicate_t)(const char *, void *, void *);
 
+typedef struct {
+    void   *data;
+    size_t  size;
+    size_t  capacity;
+} Cfire_Data;
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -98,7 +106,7 @@ CFIRE_DECL_ int         cfire_try_parse_integer(const char *s, long int *out);
 CFIRE_DECL_ int         cfire_try_parse_floating(const char *s, double *out);
 CFIRE_DECL_ const char *cfire_remove_prefix(const char *s, char c);
 CFIRE_DECL_ Cfire_Error cfire_convert_name(const char *arg_name, char *out, int flags);
-CFIRE_DECL_ Cfire_Error cfire_parse_entry(const char *arg_name, const char *arg_value, Cfire_Entry *out_entry, int flag);
+CFIRE_DECL_ Cfire_Error cfire_parse_entry(const char *arg_name, const char *arg_value, Cfire_Entry *out_entry, Cfire_Data *data, int flag);
 CFIRE_DECL_ Cfire_Error cfire_parse(int argc, char **argv, Cfire_Entry **out_entries, size_t *out_entry_count, int* err_index, int flags);
 CFIRE_DECL_ const char *cfire_error_string(Cfire_Error error);
 CFIRE_DECL_ void        cfire_free(Cfire_Entry *entries);
@@ -115,10 +123,125 @@ CFIRE_DECL_ Cfire_Error cfire_loadd(double *dest, const Cfire_Entry *entry);
 CFIRE_DECL_ Cfire_Error cfire_loadf(float *dest, const Cfire_Entry *entry);
 CFIRE_DECL_ Cfire_Error cfire_loads(const char **dest, const Cfire_Entry *entry);
 
+CFIRE_DECL_ Cfire_Error cfire_data_new(Cfire_Data **cfire_data);
+CFIRE_DECL_ void        cfire_data_free(Cfire_Data *cfire_data);
+CFIRE_DECL_ Cfire_Error cfire_data_append(Cfire_Data *cfire_data, const void *src, size_t n, void** result);
+CFIRE_DECL_ Cfire_Error cfire_data_expand(Cfire_Data *cfire_data, size_t target);
+
+#define CFIRE_DATA_INITIAL_CAPACITY 256
+
 #ifdef __cplusplus
 }
 #endif
 #ifndef CFIRE_DECLARATION_ONLY
+
+CFIRE_DEF_ Cfire_Error cfire_data_new(Cfire_Data **cfire_data) {
+    Cfire_Error err_code = CFIRE_SUCCESS;
+    Cfire_Data* retval;
+
+    if (cfire_data == NULL) {
+        err_code = CFIRE_INVALID_PTR;
+        goto error;
+    }
+
+    retval = malloc(sizeof(Cfire_Data));
+    if (retval == NULL) {
+        err_code = CFIRE_BAD_ALLOC;
+        goto error;
+    } 
+
+    retval->data = malloc(CFIRE_DATA_INITIAL_CAPACITY);
+    if (retval->data == NULL) {
+        err_code = CFIRE_BAD_ALLOC;
+        goto error;
+    }
+
+    retval->size = 0;
+    retval->capacity = CFIRE_DATA_INITIAL_CAPACITY;
+
+    *cfire_data = retval;
+    return CFIRE_SUCCESS;
+
+error:
+    cfire_data_free(retval);
+
+    return err_code;
+}
+
+CFIRE_DEF_ void cfire_data_free(Cfire_Data *cfire_data) {
+   if (cfire_data == NULL) return;
+
+   if (cfire_data->data != NULL) {
+       free(cfire_data->data);
+   }
+
+   free(cfire_data);
+}
+
+CFIRE_DEF_ Cfire_Error cfire_data_append(Cfire_Data *cfire_data, const void *src, size_t n, void** result) {
+    Cfire_Error err_code = CFIRE_SUCCESS;
+
+    if (cfire_data == NULL) {
+        err_code = CFIRE_INVALID_PTR;
+        goto error;
+    }
+
+    if (cfire_data->size + n > cfire_data->capacity) {
+        err_code = cfire_data_expand(cfire_data, cfire_data->size + n);
+        if (err_code != CFIRE_SUCCESS) {
+            goto error;
+        }
+    }
+
+    if (result != NULL) {
+        *result = cfire_data->data + cfire_data->size;
+    }
+
+    memcpy(cfire_data->data + cfire_data->size, src, n);
+    cfire_data->size += n;
+
+    return CFIRE_SUCCESS;
+
+error:
+    return err_code;
+}
+
+CFIRE_DEF_ Cfire_Error cfire_data_expand(Cfire_Data *cfire_data, size_t target) {
+    Cfire_Error err_code = CFIRE_SUCCESS;
+    size_t      new_capacity;
+
+    if (cfire_data == NULL) {
+        err_code = CFIRE_INVALID_PTR;
+        goto error;
+    }
+    
+    if (cfire_data->capacity >= target) {
+        return CFIRE_SUCCESS;
+    }
+
+    new_capacity = cfire_data->capacity << 1;
+    new_capacity += (new_capacity == 0);
+    for (;new_capacity < target; new_capacity >>= 1);
+
+    void* new_data = malloc(new_capacity);
+    if (new_data == NULL) {
+        new_data = malloc(target);
+        if (new_data == NULL) {
+            err_code = CFIRE_BAD_ALLOC;
+            goto error;
+        }
+    }
+
+    memcpy(new_data, cfire_data->data, cfire_data->size);
+    free(cfire_data->data);
+
+    cfire_data->data = new_data;
+    cfire_data->capacity = new_capacity;
+    return CFIRE_SUCCESS;
+
+error:
+    return err_code;
+}
 
 CFIRE_DEF_ int cfire_try_parse_integer(const char *s, long int *out) {
     if (!isdigit((unsigned char)s[0]) && s[0] != '+' && s[0] != '-') {
@@ -161,11 +284,7 @@ CFIRE_DEF_ int cfire_try_parse_floating(const char *s, double *out) {
 }
 
 CFIRE_DEF_ const char *cfire_remove_prefix(const char *s, char c) {
-    for (;; ++s) {
-        if (*s != c) {
-            break;
-        }
-    }
+    for (;*s == c && *s != '\0';++s);
     return s;
 }
 
@@ -198,9 +317,10 @@ finish:
 }
 
 CFIRE_DEF_ Cfire_Error cfire_parse_entry(
-    const char * arg_name,
-    const char * arg_value,
+    const char  *arg_name,
+    const char  *arg_value,
     Cfire_Entry *out_entry,
+    Cfire_Data  *data,
     int          flags
 ) {
 
@@ -230,12 +350,23 @@ CFIRE_DEF_ Cfire_Error cfire_parse_entry(
         goto finish;
     }
 
-    out_entry->kind         = CFIRE_ARG_KIND_STRING;
-    out_entry->value.string = arg_value;
+    out_entry->kind = CFIRE_ARG_KIND_STRING;
+    if (flags & CFIRE_COPY_STRINGS) {
+        void *result;
+        error_code = cfire_data_append(data, arg_value, strlen(arg_value), &result);
+        if (error_code != CFIRE_SUCCESS) {
+            goto finish;
+        }
+        out_entry->value.string = result;
+    } else {
+        out_entry->value.string = arg_value;
+    }
 
 finish:
     return error_code;
 }
+
+#define CFIRE_NEEDS_ALLOCATE_DATA_(flag) ((flag) | CFIRE_COPY_STRINGS)
 
 CFIRE_DEF_ Cfire_Error cfire_parse(
     int           argc,
@@ -254,6 +385,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
     size_t       fentry_cnt;
     size_t       act_argc = argc - ((flags & CFIRE_ZERO) ? 0 : 1);
 	int          err_index = -1;
+    void*        ptr;
 
     if (!(flags & CFIRE_FLAGS)) {
 
@@ -264,15 +396,25 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
 
         entry_cnt = act_argc >> 1;
 
-        entries = malloc(sizeof(Cfire_Entry) * entry_cnt);
-        if (entries == NULL) {
+        ptr = malloc(sizeof(Cfire_Entry) * entry_cnt + sizeof(Cfire_Data *));
+        if (ptr == NULL) {
             err_code = CFIRE_BAD_ALLOC;
             goto error;
+        }
+        entries = ptr + sizeof(Cfire_Data *);
+
+        if (CFIRE_NEEDS_ALLOCATE_DATA_(flags)) {
+            err_code = cfire_data_new((Cfire_Data **) ptr);
+            if (err_code != CFIRE_SUCCESS) {
+                goto error;
+            }
+        } else {
+            *(Cfire_Data **) ptr = NULL;
         }
 
         curr_entry = entries;
         for (i = (flags & CFIRE_ZERO) ? 0 : 1; i < argc; i += 2, ++curr_entry) {
-            err_code = cfire_parse_entry(argv[i], argv[i + 1], curr_entry, flags);
+            err_code = cfire_parse_entry(argv[i], argv[i + 1], curr_entry, *(Cfire_Data **) ptr, flags);
             if (err_code != CFIRE_SUCCESS) {
 				err_index = i;
                 goto error;
@@ -295,10 +437,20 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
 
         entry_cnt = ((act_argc - fentry_cnt) >> 1) + fentry_cnt;
 
-        entries = malloc(sizeof(Cfire_Entry) * entry_cnt);
-        if (entries == NULL) {
+        ptr = malloc(sizeof(Cfire_Entry) * entry_cnt + sizeof(Cfire_Data *));
+        if (ptr == NULL) {
             err_code = CFIRE_BAD_ALLOC;
             goto error;
+        }
+        entries = ptr + sizeof(Cfire_Data *);
+
+        if (CFIRE_NEEDS_ALLOCATE_DATA_(flags)) {
+            err_code = cfire_data_new((Cfire_Data **) ptr);
+            if (err_code != CFIRE_SUCCESS) {
+                goto error;
+            }
+        } else {
+            *(Cfire_Data **) ptr = NULL;
         }
 
         curr_entry = entries;
@@ -336,7 +488,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
 
             p = 0;
 
-            err_code = cfire_parse_entry(argv[i - 1], argv[i], curr_entry, flags);
+            err_code = cfire_parse_entry(argv[i - 1], argv[i], curr_entry, *(Cfire_Data **) ptr, flags);
             if (err_code != CFIRE_SUCCESS) {
 				err_index = i - 1;
                 goto error;
@@ -358,9 +510,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
     return err_code;
 
 error:
-    if (entries != NULL) {
-        free(entries);
-    }
+    cfire_free(entries);
 
 	if (out_err_index != NULL) {
 		*out_err_index = err_index;
@@ -416,7 +566,9 @@ CFIRE_DEF_ const char *cfire_error_string(Cfire_Error error) {
 
 CFIRE_DEF_ void cfire_free(Cfire_Entry *entries) {
     if (entries != NULL) {
-        free(entries);
+        void* ptr = (void *) entries - sizeof(Cfire_Data *);
+        cfire_data_free(*(Cfire_Data **) ptr);
+        free(ptr);
     }
 }
 
