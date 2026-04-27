@@ -354,7 +354,7 @@ CFIRE_DEF_ Cfire_Error cfire_parse_entry(
     out_entry->kind = CFIRE_ARG_KIND_STRING;
     if (flags & CFIRE_COPY_STRINGS) {
         size_t curr_size = data->size;
-        error_code = cfire_data_append(data, arg_value, strlen(arg_value), NULL);
+        error_code = cfire_data_append(data, arg_value, strlen(arg_value) + 1, NULL);
         if (error_code != CFIRE_SUCCESS) {
             goto finish;
         }
