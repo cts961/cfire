@@ -87,6 +87,7 @@ typedef struct {
     char           name[64];
     Cfire_ArgKind  kind;
     Cfire_ArgValue value;
+    size_t         _str_ptr_offset;
 } Cfire_Entry;
 
 typedef int (*Cfire_Predicate_t)(const char *, void *, void *);
@@ -128,7 +129,7 @@ CFIRE_DECL_ void        cfire_data_free(Cfire_Data *cfire_data);
 CFIRE_DECL_ Cfire_Error cfire_data_append(Cfire_Data *cfire_data, const void *src, size_t n, void** result);
 CFIRE_DECL_ Cfire_Error cfire_data_expand(Cfire_Data *cfire_data, size_t target);
 
-#define CFIRE_DATA_INITIAL_CAPACITY 256
+#define CFIRE_DATA_INITIAL_CAPACITY 32
 
 #ifdef __cplusplus
 }
@@ -352,12 +353,13 @@ CFIRE_DEF_ Cfire_Error cfire_parse_entry(
 
     out_entry->kind = CFIRE_ARG_KIND_STRING;
     if (flags & CFIRE_COPY_STRINGS) {
-        void *result;
-        error_code = cfire_data_append(data, arg_value, strlen(arg_value), &result);
+        size_t curr_size = data->size;
+        error_code = cfire_data_append(data, arg_value, strlen(arg_value), NULL);
         if (error_code != CFIRE_SUCCESS) {
             goto finish;
         }
-        out_entry->value.string = result;
+        out_entry->value.string = NULL;
+        out_entry->_str_ptr_offset = curr_size;
     } else {
         out_entry->value.string = arg_value;
     }
@@ -498,6 +500,18 @@ CFIRE_DEF_ Cfire_Error cfire_parse(
         }
     }
 
+    if (!(flags & CFIRE_COPY_STRINGS)) {
+        goto finish;
+    }
+    
+    for (size_t n = 0; n < entry_cnt; ++n) {
+        if (entries[n].kind == CFIRE_ARG_KIND_STRING) {
+            entries[n].value.string = (*(Cfire_Data **) ptr)->data + entries[n]._str_ptr_offset;
+        }
+    }
+
+
+finish:
     // Write outputs
     if (out_entries != NULL) {
         *out_entries = entries;
