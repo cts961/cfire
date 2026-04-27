@@ -19,9 +19,26 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-
 #ifndef CFIRE_LIBRARY_H
 #define CFIRE_LIBRARY_H
+
+#ifdef CFIRE_IMPLEMENTATION
+
+#ifdef CFIRE_SOURCE
+#define CFIRE_DECL_ 
+#define CFIRE_DEF_  
+#else
+#define CFIRE_DECL_ static inline
+#define CFIRE_DEF_  inline
+#endif
+
+#else 
+
+#define CFIRE_DECL_ 
+#define CFIRE_DEF_
+
+#endif
+
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -35,13 +52,6 @@
 
 #ifndef CFIRE_FLAG_VALUE
 #define CFIRE_FLAG_VALUE 1
-#endif
-
-#define CFIRE_DECL_ static inline
-#define CFIRE_DEF_ inline
-
-#ifdef __cplusplus
-#define CFIRE_DECLARATION_ONLY
 #endif
 
 #define CFIRE_ARG_KIND_INTEGER_VALUE(Entry) (Entry)->value.integer
@@ -134,7 +144,8 @@ CFIRE_DECL_ Cfire_Error cfire_data_expand(Cfire_Data *cfire_data, size_t target)
 #ifdef __cplusplus
 }
 #endif
-#ifndef CFIRE_DECLARATION_ONLY
+
+#ifdef CFIRE_IMPLEMENTATION
 
 CFIRE_DEF_ Cfire_Error cfire_data_new(Cfire_Data **cfire_data) {
     Cfire_Error err_code = CFIRE_SUCCESS;
@@ -586,7 +597,7 @@ CFIRE_DEF_ void cfire_free(Cfire_Entry *entries) {
     }
 }
 
-#endif // NOT CFIRE_DECLARATION_ONLY
+#endif // NOT CFIRE_IMPLEMENTATION
 
 /* vvv For loading values vvv */
 
@@ -615,15 +626,17 @@ CFIRE_DEF_ void cfire_free(Cfire_Entry *entries) {
         CFIRE_ARG_ASSIGN_(STRING, Type);\
     CFIRE_DEFINE_TYPED_CONVERSION_END_
 
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(int, i);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(long, l);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(long long, ll);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned int, u);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long, ul);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long long, ull);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(double, d);
-CFIRE_DEFINE_NUMERICAL_CONVERSION_(float, f);
-CFIRE_DEFINE_STRING_CONVERSION_(const char*, s);
+#ifdef CFIRE_IMPLEMENTATION
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(int, i);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(long, l);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(long long, ll);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned int, u);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long, ul);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(unsigned long long, ull);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(double, d);
+    CFIRE_DEFINE_NUMERICAL_CONVERSION_(float, f);
+    CFIRE_DEFINE_STRING_CONVERSION_(const char*, s);
+#endif
 
 #define Cfire_ForEachEntry(Entries, NEntries, ErrorCode) \
     size_t Cfire_Macro_Internal_Index = 0;  \

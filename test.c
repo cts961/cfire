@@ -1,5 +1,5 @@
 #include <stdio.h>
-
+#define CFIRE_IMPLEMENTATION
 #include "cfire.h"
 
 struct MyArgs {
