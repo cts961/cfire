@@ -2,6 +2,8 @@
 
 > [!WARNING]
 > The work is still in progress. Anything may change or be removed.
+> This file may contain outdated information because I have not
+> updated it for latest changes.
 
 This is a simple header-only C-library for extracting command line argument names and values.
 The command line arguments are parsed into an array of `Cfire_Entry` structs, which has a
@@ -10,6 +12,12 @@ name, and value-kind tag, and a union for the value.
 In brief, you call `cfire_parse(argc, argv, &entries, &n_entries, flags)` and to
 extract the command line arguments, where `flags` controls the behavior of
 the parser. See "Parse Flags (Not Flag Entries)" section.
+
+## Build
+
+This is an stb-like single-file library. Define `CFIRE_IMPLEMENTATION` before
+including `cfire.h` to contain the function definitions. Otherwise, only the
+declarations will be included, and you need to link libcfire.a.
 
 ## The `Cfire_Entry` Struct
 
